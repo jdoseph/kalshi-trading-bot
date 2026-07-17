@@ -101,6 +101,68 @@ collect the small remaining drift to $1.00, under strict budget caps.
   the working budget is the global cap. New positions stop once the balance
   reaches `compound_target_usd`.
 
+#### How to run the Resolution Sniper
+
+Always start in **dry-run** and only go live once you've watched it behave.
+
+**1. Confirm auth works (read-only, safe):**
+
+```bash
+cargo run -- balance      # should print your account balance
+```
+
+**2. Tune the strategy** in `config.yaml` under `strategies.resolution_sniper`
+(see the [configuration reference](#configuration-reference-resolution_sniper)).
+At minimum set `threshold_cents`, your budget/compounding fields, and the
+stop-loss. Leave both live gates **safe** for now:
+
+```yaml
+enable_trading: false     # gate 1 — safe
+mock_trading: true        # gate 2 — safe
+```
+
+**3. Run in dry-run and watch the logs:**
+
+```bash
+cargo run --release -- snipe
+# optional: --max-pages N  (markets pages scanned per cycle; default 10)
+```
+
+Each scan logs what it *would* do without sending anything. Look for lines like:
+
+- `scan complete` — how many markets were scanned, priced, and how many candidates matched.
+- `DRY-RUN would snipe` — an order the bot would have placed (ticker, count, price).
+- `DRY-RUN would STOP-LOSS sell` — the stop-loss firing on a held position.
+
+Let it run for several scan cycles. Confirm the candidate prices, position sizes
+(≈ your `position_pct_of_budget` of budget when compounding), and stop behavior
+all look right.
+
+**4. Go live** only when you're satisfied. Set **both** gates in `config.yaml`:
+
+```yaml
+enable_trading: true      # gate 1 — open
+mock_trading: false       # gate 2 — open
+```
+
+Then run the same command:
+
+```bash
+cargo run --release -- snipe
+```
+
+Now `SNIPED` and `STOP-LOSS SOLD` log lines mean **real orders were sent.** The
+loop runs continuously until you stop it (`Ctrl-C`) or the compound target is
+reached. Monitor it live in a second terminal:
+
+```bash
+cargo run -- positions    # open positions, cost, fees
+cargo run -- tui          # live dashboard
+```
+
+> **Reminder:** the sniper is approximately break-even after fees — the stop-loss
+> and budget caps limit downside, they don't create profit. Start small.
+
 ### Crypto Convergence (`crypto`)
 
 Trades short-dated BTC/ETH threshold markets when a realized-volatility model
