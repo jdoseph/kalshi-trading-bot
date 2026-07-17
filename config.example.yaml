@@ -4,7 +4,12 @@
 #   https://github.com/HarrierOnChain/Prediction-Markets-Trading-Bot-Toolkits
 
 venue: kalshi   # adapter selector
-enable_trading: false               # ALWAYS start in dry-run
+
+# TWO-GATE LIVE SAFETY: a real order is sent ONLY when
+# `enable_trading: true` AND `mock_trading: false`. Keep either gate set to the
+# safe value below until you have deliberately tested in dry-run.
+enable_trading: false               # gate 1 — ALWAYS start in dry-run
+mock_trading: true                  # gate 2 — true = never sends real orders
 
 credentials:
   # Uncomment the block that matches Kalshi.
