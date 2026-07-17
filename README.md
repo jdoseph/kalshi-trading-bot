@@ -1,111 +1,155 @@
 # Kalshi Trading Bot
 
-**🌐 Language / 语言 / Язык:** [English](README.md) · [简体中文](README.zh-CN.md) · [Русский](README.ru.md)
-
-![Status](https://img.shields.io/badge/status-🟢_live-2ea44f?style=flat-square)
-[![Engine](https://img.shields.io/badge/engine-shared_core-6e40c9?style=flat-square)](https://github.com/HarrierOnChain/Prediction-Markets-Trading-Bot-Toolkits)
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg?style=flat-square&logo=rust)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
-[![CI](https://github.com/HarrierOnChain/Kalshi/actions/workflows/ci.yml/badge.svg)](https://github.com/HarrierOnChain/Kalshi/actions/workflows/ci.yml)
-
-> Automated **Kalshi trading bot** — CFTC-regulated (US). Part of the [Prediction Market Toolkits](https://github.com/HarrierOnChain/Prediction-Markets-Trading-Bot-Toolkits) suite: one execution core, one risk layer, every venue.
-
-**Kalshi** is **live in production today.**
+A Rust automated execution engine for [Kalshi](https://kalshi.com) (CFTC-regulated US
+prediction markets). It scans near-resolution and short-dated markets, applies risk
+controls, and places orders through a guarded, dry-run-safe order path.
 
 ---
 
-## Live on Kalshi
+## ⚠️ Read this first — real money
 
-<div align="center">
+This bot can place **real orders on a real account.** It is protected by a
+**two-gate** model. A live order is sent **only** when **both** gates are open:
 
-<img width="820" alt="Kalshi trading bot TUI" src="https://github.com/user-attachments/assets/b6c51ba1-14c6-4582-858c-e9441516dd1d" />
-<img width="820" alt="Kalshi trading bot TUI" src="https://github.com/user-attachments/assets/66d9cb72-e14a-414f-93e5-600fb1d3f49f" />
-
-<sub>The shared TUI running against Kalshi — live positions, P&L, and circuit-breaker state. <!-- TODO: swap in Kalshi-specific captures --></sub>
-
-</div>
-
----
-
-## Strategies on Kalshi
-
-These bots run on Kalshi through a single venue adapter on the shared engine — same risk controls, same TUI, full dry-run support.
-
-| Strategy |
-|----------|
-| 💰 **Cross-Market Arbitrage** — lock the spread, not the direction |
-| 🎯 **Resolution Sniper** — 95¢ near-certainty → guaranteed $1.00 payout |
-| 📊 **Orderbook Imbalance** — the signal *is* the order book, no external feeds |
-| 💰 **Market Making** — be the house, not the gambler (two-sided GTD, inventory skew) |
-| 🎯 **Directional Arbitrage** — arb base (Up + Down < $1), tilted toward the side with more edge |
-| 📈 **Spread Farming** — a thousand 0.5¢ wins compound into one number |
-| 🏆 **Sports Execution** — click, filled, done — under 50ms FAK |
-
-> Want a strategy not listed here on Kalshi? Adapter coverage is demand-driven — [ask](https://t.me/HarrierOnChain).
-
----
-
-## Quickstart
-
-Clone, drop in your keys, and run — the TUI lets you pick a strategy.
-
-```bash
-git clone https://github.com/HarrierOnChain/Kalshi.git
-cd Kalshi
-cp config.example.yaml config.yaml   # add your keys
-cargo run --release                  # launch the TUI
-# headless: cargo run --release -- run copy-trading
+```yaml
+enable_trading: true    # gate 1
+mock_trading: false     # gate 2
 ```
 
----
+If **either** gate is at its safe value (`enable_trading: false` **or**
+`mock_trading: true`), the bot computes and logs what it *would* do but **sends
+nothing to the network**. `config.example.yaml` ships with both gates safe.
+**Leave them safe until you have watched a dry-run and understand the behavior.**
 
-## One engine, every venue
-
-This repo is the **Kalshi** entry point. The execution core, risk layer, and all 20+ venue adapters live in the main toolkit:
-
-### 👉 **[Prediction-Markets-Trading-Bot-Toolkits](https://github.com/HarrierOnChain/Prediction-Markets-Trading-Bot-Toolkits)** — the full suite
-
-| | |
-|---|---|
-| **Order execution** | < 100ms end-to-end |
-| **Event processing** | < 1ms per event |
-| **Safety** | Circuit breaker · depth guard · dry-run · trade floor |
-| **Venues** | 7 live today · 20+ venues |
-
-Adding a venue means writing **one adapter** — not rebuilding a bot.
+Your credentials live in `config.yaml`, which is **gitignored and never
+committed**. Never move it into a tracked path, and never paste it anywhere.
 
 ---
 
-## Get access
+## Setup
 
-| Platform | Link |
-|----------|------|
-| **Full toolkit** | [Prediction-Markets-Trading-Bot-Toolkits](https://github.com/HarrierOnChain/Prediction-Markets-Trading-Bot-Toolkits) |
-| **Telegram** | [@HarrierOnChain](https://t.me/HarrierOnChain) |
-| **Discussions** | [GitHub Discussions](https://github.com/HarrierOnChain/Prediction-Markets-Trading-Bot-Toolkits/discussions) |
+**Prerequisites:** Rust 1.70+ (`rustup`), a Kalshi account, and a Kalshi API key
+(an API key ID + an RSA private key — generate these in your Kalshi account
+settings under API access).
 
-*Response time is typically within a few hours.*
+```bash
+# 1. Clone
+git clone https://github.com/jdoseph/kalshi-trading-bot.git
+cd kalshi-trading-bot
+
+# 2. Create your private config from the template
+cp config.example.yaml config.yaml
+#    Then edit config.yaml: paste your api_key_id and RSA private_key,
+#    and keep enable_trading: false / mock_trading: true for now.
+
+# 3. Build & test
+cargo build --release
+cargo test          # 73 tests should pass
+
+# 4. Verify auth works (read-only, safe)
+cargo run -- balance
+```
+
+If `balance` prints a dollar figure, your credentials and signing are working.
 
 ---
 
-## Related venues
+## Commands
 
-[Polymarket](https://github.com/HarrierOnChain/Polymarket) · [Interactive Brokers ForecastTrader](https://github.com/HarrierOnChain/Interactive-Brokers-ForecastTrader) · [Limitless](https://github.com/HarrierOnChain/Limitless-Exchange) · [OG.com](https://github.com/HarrierOnChain/OG.com)
+The binary is `kalshi-bot`. All commands take an optional `--config <path>`
+(defaults to `config.yaml`). During development use `cargo run -- <command>`.
 
-> Browse the full venue directory in the [main toolkit →](https://github.com/HarrierOnChain/Prediction-Markets-Trading-Bot-Toolkits#venue-coverage)
+| Command | What it does | Touches money? |
+|---|---|---|
+| `balance` | Print account balance (the canonical auth check). | No (read-only) |
+| `positions` | List open positions (ticker, shares, cost, fees). | No (read-only) |
+| `markets --limit N` | List open markets. | No (read-only) |
+| `orderbook <TICKER>` | Show a market's orderbook + derived best asks/depth. | No (read-only) |
+| `tui` | Live dashboard: balance, positions, circuit-breaker, mode. | No (read-only) |
+| `snipe --max-pages N` | Run the **Resolution Sniper** loop continuously. | **Only if both gates open** |
+| `crypto --max-pages N` | Run the **Crypto Convergence** loop continuously. | **Only if both gates open** |
+| `buy <TICKER> <yes\|no> <count> <price_cents>` | Place one limit order. | **Only if both gates open** |
+
+Read-only commands are always safe to run. `snipe`, `crypto`, and `buy` respect
+the two-gate model — in dry-run they log `DRY-RUN would ...` and send nothing.
 
 ---
 
-## Disclaimer
+## Strategies
 
-> Trading prediction markets involves real financial risk. This software is provided as-is, without warranty. It is not financial advice. Always test with `enable_trading: false` before deploying real capital. Ensure compliance with Kalshi's terms of service and your local regulations.
+### Resolution Sniper (`snipe`)
+
+Buys YES in near-certain markets (`yes_ask ≥ threshold_cents`, e.g. 97¢) to
+collect the small remaining drift to $1.00, under strict budget caps.
+
+> **Honest note on edge:** buying at ~97¢ to win $1 is roughly the *fair* price —
+> the market already prices it at ~97% likely. After fees this is approximately
+> break-even to slightly negative expected value. The risk controls below limit
+> losses; they do not by themselves create profit. Real profit requires finding
+> markets whose true probability exceeds the ask.
+
+**Risk & growth controls:**
+
+- **Stop-loss** — if a held position's best YES bid falls **below**
+  `stop_loss_floor_cents` for `stop_loss_confirm_scans` consecutive scans, the
+  whole position is sold (the 2-scan confirm filters spread/noise dips). Freed
+  budget is released for redeployment.
+- **Compounding** — when `position_pct_of_budget > 0`, each position is capped at
+  that fraction of the **current working budget** (real cash, capped at
+  `compound_target_usd`). As settled cash grows, position size grows with it; as
+  it shrinks, positions shrink. In this mode `max_total_budget_usd` is ignored —
+  the working budget is the global cap. New positions stop once the balance
+  reaches `compound_target_usd`.
+
+### Crypto Convergence (`crypto`)
+
+Trades short-dated BTC/ETH threshold markets when a realized-volatility model
+implies an edge over the market price, after fees. See
+`docs/superpowers/specs/` for the design.
 
 ---
 
-<div align="center">
+## Configuration reference (`resolution_sniper`)
 
-**Kalshi trading bot · built on the [Prediction Market Toolkits](https://github.com/HarrierOnChain/Prediction-Markets-Trading-Bot-Toolkits) engine**
+```yaml
+strategies:
+  resolution_sniper:
+    enabled: true
+    threshold_cents: 97          # buy YES at or above this ask
+    per_snipe_budget_usd: 2      # spend per individual order (non-compounding mode)
+    max_per_market_usd: 4        # per-ticker cap (non-compounding mode)
+    max_total_budget_usd: 1000   # global cap (IGNORED when compounding is on)
+    scan_interval_secs: 30       # seconds between scans
+    close_window_secs: 5400      # only markets closing within this many seconds
+    min_open_interest: 100       # skip zero-OI placeholder markets
 
-[![Telegram](https://img.shields.io/badge/Telegram-@HarrierOnChain-26A5E4?style=flat-square&logo=telegram)](https://t.me/HarrierOnChain)
+    # --- stop-loss ---
+    stop_loss_floor_cents: 80    # sell if YES bid drops below this; 0 = disabled
+    stop_loss_confirm_scans: 2   # require N consecutive scans below floor first
 
-</div>
+    # --- compounding ---
+    position_pct_of_budget: 0.05 # each position ≤ this fraction of budget; 0 = off
+    compound_target_usd: 5000    # stop opening new positions at this balance; 0 = none
+```
+
+**Key interactions to understand before running live:**
+- Compounding **on** (`position_pct_of_budget > 0`): budget = `min(real cash,
+  compound_target_usd)`; per-position cap = `position_pct_of_budget × budget`;
+  `max_total_budget_usd` and `max_per_market_usd` are **not used**.
+- Compounding **off** (`position_pct_of_budget: 0`): the fixed dollar caps apply,
+  so set `max_total_budget_usd` to something sane for your account size.
+
+---
+
+## Development
+
+```bash
+cargo test        # unit tests (pure planning logic, order-gate safety, stop-loss)
+cargo clippy      # lint
+cargo build --release
+```
+
+The strategy logic is split into pure, tested functions (`plan_snipes`,
+`plan_stops`, `SniperState`) and thin I/O loops, so the decision logic is
+testable without network access. Order placement is the only path that can move
+money and is the most guarded — see `src/orders.rs`.
