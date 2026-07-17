@@ -58,6 +58,31 @@ impl<'a, S: RequestSender> OrderPlacer<'a, S> {
         self.guard.record_trade(order, now_secs);
         Ok(OrderOutcome::Sent { response: resp.to_string() })
     }
+
+    /// Place an **exit** order (e.g. a stop-loss sell). Identical to [`place`]
+    /// except it uses the exit guard, which skips the trade-floor and depth
+    /// checks — an exit must be able to get out of a small position, or sell
+    /// into a thin/collapsing book, which is precisely when a stop needs to
+    /// fire. The circuit breaker and the two-gate live check still apply.
+    pub fn place_exit(
+        &mut self,
+        order: &PlannedOrder,
+        now_secs: u64,
+    ) -> Result<OrderOutcome> {
+        if let Err(rej) = self.guard.check_exit(now_secs) {
+            return Ok(OrderOutcome::Rejected(rej));
+        }
+
+        let payload = order_payload(order);
+
+        if !self.live_allowed {
+            return Ok(OrderOutcome::DryRun { payload });
+        }
+
+        let resp = self.client.request_json("POST", ORDER_ROUTE, Some(payload))?;
+        self.guard.record_trade(order, now_secs);
+        Ok(OrderOutcome::Sent { response: resp.to_string() })
+    }
 }
 
 /// Kalshi v2 create-order endpoint. (The v1 `/portfolio/orders` path now 410s.)
@@ -210,6 +235,57 @@ mod tests {
         } else {
             panic!("expected DryRun");
         }
+    }
+
+    #[test]
+    fn exit_bypasses_trade_floor_and_depth_guards() {
+        // A sub-floor sell into a paper-thin book: `place` would REJECT it, but
+        // `place_exit` must let it through (minus the two-gate check) so a
+        // stop-loss can actually get out of a small/collapsing position.
+        let count = Arc::new(AtomicU32::new(0));
+        let client = KalshiClient::new("https://host/trade-api/v2", signer(), CountingSender(count.clone()));
+        let mut guard = RiskGuard::new(risk()); // floor $5, depth $100
+        let mut placer = OrderPlacer::new(&client, &mut guard, true); // live
+
+        // Sell YES @ 70c (buy NO @ 30c), only 1 contract = $0.30 notional,
+        // into an essentially empty book — both entry guards would reject.
+        let exit = PlannedOrder {
+            ticker: "T".into(),
+            side: Side::No,
+            order_type: OrderType::Market,
+            count: 1,
+            price_cents: 30,
+        };
+        let thin = Orderbook { ticker: "T".into(), yes: vec![], no: vec![] };
+
+        // Sanity: the normal entry path DOES reject this.
+        let rejected = placer.place(&exit, &thin, 0).unwrap();
+        assert!(matches!(rejected, OrderOutcome::Rejected(_)), "entry guard should reject a sub-floor thin order");
+        assert_eq!(count.load(Ordering::SeqCst), 0);
+
+        // The exit path sends it.
+        let sent = placer.place_exit(&exit, 0).unwrap();
+        assert!(matches!(sent, OrderOutcome::Sent { .. }), "exit must bypass floor/depth guards");
+        assert_eq!(count.load(Ordering::SeqCst), 1, "exit actually sent");
+    }
+
+    #[test]
+    fn exit_still_respects_two_gate_dry_run() {
+        // Even on the exit path, dry-run must not touch the network.
+        let count = Arc::new(AtomicU32::new(0));
+        let client = KalshiClient::new("https://host/trade-api/v2", signer(), CountingSender(count.clone()));
+        let mut guard = RiskGuard::new(risk());
+        let mut placer = OrderPlacer::new(&client, &mut guard, false); // dry-run
+        let exit = PlannedOrder {
+            ticker: "T".into(),
+            side: Side::No,
+            order_type: OrderType::Market,
+            count: 1,
+            price_cents: 30,
+        };
+        let outcome = placer.place_exit(&exit, 0).unwrap();
+        assert!(matches!(outcome, OrderOutcome::DryRun { .. }));
+        assert_eq!(count.load(Ordering::SeqCst), 0, "dry-run exit must not send");
     }
 
     #[test]

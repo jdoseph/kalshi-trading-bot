@@ -90,6 +90,23 @@ impl RiskGuard {
         Ok(())
     }
 
+    /// Guard for an **exit** (e.g. a stop-loss sell), not an entry. The trade
+    /// floor and depth guards deliberately do NOT apply: those exist to stop us
+    /// from *entering* bad positions, but when cutting a loss we want out
+    /// regardless of position size or how thin the (collapsing) book is —
+    /// applying entry guards there is exactly what traps us in a loser. Only the
+    /// circuit breaker still applies, since it governs runaway *sending*, not
+    /// position risk.
+    pub fn check_exit(&mut self, now_secs: u64) -> Result<(), Rejection> {
+        if let Some(until) = self.tripped_until {
+            if now_secs < until {
+                return Err(Rejection::CircuitBreakerTripped { until_secs: until });
+            }
+            self.tripped_until = None;
+        }
+        Ok(())
+    }
+
     /// Record that an order was sent, updating the circuit breaker. Call this
     /// only for orders that actually proceed. Trips the breaker if too many
     /// large trades land within the window.

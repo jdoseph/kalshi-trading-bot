@@ -310,13 +310,11 @@ pub fn run<S: RequestSender>(
                         cfg.stop_loss_confirm_scans,
                     );
                     for exit in exits {
-                        let book = match held_books.get(&exit.order.ticker) {
-                            Some(b) => b.clone(),
-                            None => continue,
-                        };
                         let (mut guard, live_allowed) = placer_factory();
                         let mut placer = OrderPlacer::new(md.client(), &mut guard, live_allowed);
-                        match placer.place(&exit.order, &book, now_secs()) {
+                        // Exit path: skips entry guards (trade floor / depth) so a
+                        // stop can get out of a small position or a thin book.
+                        match placer.place_exit(&exit.order, now_secs()) {
                             Ok(OrderOutcome::Sent { .. }) => {
                                 state.release(&exit.order.ticker);
                                 stop.clear(&exit.order.ticker);
