@@ -98,6 +98,25 @@ impl<'a, S: RequestSender> MarketData<'a, S> {
             .unwrap_or(serde_json::Value::Array(vec![]));
         serde_json::from_value(positions).context("decoding positions")
     }
+
+    /// `GET /portfolio/fills` — raw execution history (paginated). Returns the
+    /// raw JSON so callers can inspect the exact wire shape.
+    pub fn fills_raw(&self, limit: u32, cursor: Option<&str>) -> Result<serde_json::Value> {
+        let mut route = format!("/portfolio/fills?limit={}", limit);
+        if let Some(c) = cursor {
+            route.push_str(&format!("&cursor={}", c));
+        }
+        self.client.request_json("GET", &route, None)
+    }
+
+    /// `GET /portfolio/settlements` — raw market-resolution history (paginated).
+    pub fn settlements_raw(&self, limit: u32, cursor: Option<&str>) -> Result<serde_json::Value> {
+        let mut route = format!("/portfolio/settlements?limit={}", limit);
+        if let Some(c) = cursor {
+            route.push_str(&format!("&cursor={}", c));
+        }
+        self.client.request_json("GET", &route, None)
+    }
 }
 
 /// Parse a Kalshi orderbook response.
