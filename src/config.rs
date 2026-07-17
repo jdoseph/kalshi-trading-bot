@@ -63,8 +63,16 @@ fn default_safety_factor() -> f64 {
 pub struct SniperConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// Buy YES when `yes_ask` is at or above this many cents.
+    /// Buy YES when `yes_ask` is at or above this many cents (lower band edge).
     pub threshold_cents: u8,
+
+    /// Optional UPPER price bound (cents). When set, only buy when the ask is in
+    /// `[threshold_cents, max_threshold_cents]` — a price *band* instead of a
+    /// floor. Used to test the favorite-longshot bias in the ~65-88c range
+    /// (buying overly-cheap favorites) rather than 97c near-certainties. When
+    /// `None`, behaves as before (buy anything at or above the floor).
+    #[serde(default)]
+    pub max_threshold_cents: Option<u8>,
     /// USD to spend per individual snipe.
     pub per_snipe_budget_usd: f64,
     /// Ceiling on total USD deployed into any single market (allows re-buys).

@@ -109,6 +109,14 @@ pub fn plan_snipes(
         if ask < cfg.threshold_cents {
             continue;
         }
+        // Optional upper bound: a price *band* for favorite-bias testing. Skip
+        // markets priced above the band (e.g. > 88c) so we're not just sniping
+        // near-certainties where the bias is already gone.
+        if let Some(max) = cfg.max_threshold_cents {
+            if ask > max {
+                continue;
+            }
+        }
 
         // Remaining budgets, accounting for what earlier candidates consumed.
         let global_left = state.remaining_total(global_cap) - pass_total;
@@ -448,6 +456,7 @@ mod tests {
         SniperConfig {
             enabled: true,
             threshold_cents: 97,
+            max_threshold_cents: None,
             per_snipe_budget_usd: 20.0,
             max_per_market_usd: 60.0,
             max_total_budget_usd: 500.0,
@@ -612,6 +621,36 @@ mod tests {
         let total: f64 = orders.iter().map(|o| o.notional_usd()).sum();
         assert!(total <= 30.0, "planned {total} exceeds global cap 30");
         assert!(!orders.is_empty());
+    }
+
+    // ---- favorite-bias price band ----
+
+    #[test]
+    fn band_buys_only_within_price_range() {
+        let mut c = cfg();
+        c.threshold_cents = 65;
+        c.max_threshold_cents = Some(88); // favorite-bias band [65, 88]
+        let markets = vec![
+            market("LOW", Some(60), "active"),  // below band
+            market("IN1", Some(70), "active"),  // in band
+            market("IN2", Some(88), "active"),  // upper edge (inclusive)
+            market("HIGH", Some(97), "active"), // above band — the old sniper zone
+        ];
+        let orders = plan(&markets, &SniperState::new(), &c);
+        let tickers: Vec<&str> = orders.iter().map(|o| o.ticker.as_str()).collect();
+        assert!(!tickers.contains(&"LOW"), "below band excluded");
+        assert!(tickers.contains(&"IN1"), "in band included");
+        assert!(tickers.contains(&"IN2"), "upper edge inclusive");
+        assert!(!tickers.contains(&"HIGH"), "above band excluded");
+    }
+
+    #[test]
+    fn no_upper_bound_behaves_as_floor() {
+        let mut c = cfg();
+        c.threshold_cents = 97;
+        c.max_threshold_cents = None; // legacy floor behavior
+        let orders = plan(&[market("T", Some(99), "active")], &SniperState::new(), &c);
+        assert_eq!(orders.len(), 1, "no upper bound: high price still buys");
     }
 
     // ---- compounding / %-of-budget sizing ----
